@@ -1,88 +1,117 @@
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
 
-public class Program {
-    HashMap clients;
-    Program() {
-        clients = new HashMap();
-        Collections.synchronizedMap(clients);
+interface OnReceived {
+    void onReceive(int user, String packet);
+}
+
+
+class Reader extends Thread {
+    private int user;
+    private Socket socket;
+
+    private OnReceived onReceived;
+
+    Reader(int user, Socket socket) {
+        this.user = user;
+        this.socket = socket;
     }
-    public void start() {
-        ServerSocket serverSocket = null;
-        Socket socket = null;
+
+    void setOnReceived(OnReceived onReceived) {
+        this.onReceived = onReceived;
+    }
+
+    @Override
+    public void run() {
         try {
-            serverSocket = new ServerSocket(7777);
-            System.out.println("서버가 시작되었습니다.");
+            InputStream is = socket.getInputStream();
+
             while (true) {
-                socket = serverSocket.accept();
-                System.out.println("[" + socket.getInetAddress() + ":"
-                        + socket.getPort() + "]" + "에서 접속하였습니다.");
-                ServerReceiver thread = new ServerReceiver(socket);
-                thread.start();
+                byte[] buf = new byte[1024];
+                int len = is.read(buf);
+                if (len == -1) {
+                    break;
+                }
+
+                String packet = new String(buf, 0, len);
+                if (onReceived != null) {
+                    onReceived.onReceive(user, packet);
+                }
+
             }
-        } catch (Exception e) {
+
+        } catch (IOException e) {
             e.printStackTrace();
         }
-    } // start()
-    void sendToAll(String msg) {
-        Iterator it = clients.keySet().iterator();
-        while (it.hasNext()) {
-            try {
-                DataOutputStream out = (DataOutputStream) clients
-                        .get(it.next());
-                out.writeUTF(msg);
-            } catch (IOException e) {
-            }
-        } // while
-    } // sendToAll
-
-    void sendOne(String msg){
-
     }
+}
 
-    public static void main(String args[]) {
-        new Program().start();
-    }
-    class ServerReceiver extends Thread {
-        Socket socket;
-        DataInputStream in;
-        DataOutputStream out;
-        ServerReceiver(Socket socket) {
-            this.socket = socket;
-            try {
-                in = new DataInputStream(socket.getInputStream());
-                out = new DataOutputStream(socket.getOutputStream());
-            } catch (IOException e) {
+
+class Server {
+    private Socket[] users;
+    private OnReceived onReceived = new OnReceived() {
+        @Override
+        public void onReceive(int user, String packet) {
+            String[] packets = packet.split(":");
+            String mode = packets[0];
+            if(mode.equals("PUT")){
+                int x= Integer.parseInt(packets[1]);
+                int y= Integer.parseInt(packets[2]);
+                putStone(user, x, y);
             }
+
         }
-        public void run() {
-            String name = "";
-            try {
-                name = in.readUTF();
-                sendToAll("#" + name + "님이 들어오셨습니다.");
-                clients.put(name, out);
-                System.out.println("현재 서버접속자 수는 "
-                        + clients.size() + "입니다.");
-                while (in != null) {
-                    sendToAll(in.readUTF());
-                }
-            } catch (IOException e) {
-                // ignore
-            } finally {
-                sendToAll("#" + name + "님이 나가셨습니다.");
-                clients.remove(name);
-                System.out.println("[" + socket.getInetAddress() + ":"
-                        + socket.getPort() + "]"
-                        + "에서 접속을 종료하였습니다.");
-                System.out.println("현재 서버접속자 수는 "
-                        + clients.size() + "입니다.");
-            } // try
-        } // run
-    } // ReceiverThread
+
+        private void putStone(int user, int x, int y) {
+        }
+    };
+
+    void start() {
+        users = new Socket[2];
+        Reader[] readers = new Reader[2];
+
+        try {
+            ServerSocket serverSocket = new ServerSocket(5000);
+            for (int i = 0; i < 2; ++i) {
+                Socket socket = serverSocket.accept();
+
+                Reader reader = new Reader(i, socket);
+                reader.setOnReceived(onReceived);
+                reader.start();
+
+                users[i] = socket;
+                readers[i] = reader;
+            }
+
+            startGame();
+
+            for (Reader reader : readers) {
+                reader.join();
+            }
+
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // START:{user_no}
+    private void startGame() throws IOException {
+        for (int user = 0; user < users.length; ++user) {
+            Socket socket = users[user];
+            OutputStream os = socket.getOutputStream();
+
+            String packet = "START:" + user;
+            os.write(packet.getBytes());
+        }
+    }
+}
+
+public class Program {
+    public static void main(String[] args) {
+        Server server = new Server();
+        server.start();
+    }
 }
