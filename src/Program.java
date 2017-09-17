@@ -43,6 +43,11 @@ public class Program {
             }
         } // while
     } // sendToAll
+
+    void sendOne(String msg){
+
+    }
+
     public static void main(String args[]) {
         new Program().start();
     }
