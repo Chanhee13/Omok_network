@@ -6,9 +6,7 @@ import java.net.Socket;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
-/**
- * @author Cremazer(cremazer@gmail.com)
- */
+
 public class Program {
     HashMap clients;
     Program() {
